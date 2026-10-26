@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Squad Survivor</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b16;color:#eef6ff;font-family:system-ui,Segoe UI,Arial;touch-action:none}
+canvas{display:block;width:100vw;height:100vh;background:#070b16}
+#hud{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:7px;flex-wrap:wrap;z-index:2;pointer-events:none}
+.p{background:#10192bd9;border:1px solid #304362;border-radius:10px;padding:7px 9px;font-size:12px}.p b{color:#5ee9ff}
+#hpbar{width:120px;height:7px;background:#30384a;border-radius:9px;overflow:hidden;margin-top:4px}#hp{height:100%;background:#55e58b;width:100%}
+#hint{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:2;background:#10192bd9;border:1px solid #304362;border-radius:9px;padding:6px 10px;font-size:11px;color:#aebed7;text-align:center;pointer-events:none}
+#mobile{display:none;position:fixed;inset:0;z-index:3;pointer-events:none}
+#stick{position:absolute;left:18px;bottom:24px;width:120px;height:120px;border-radius:50%;background:#182742aa;border:2px solid #83a7d755;pointer-events:auto}
+#knob{position:absolute;width:48px;height:48px;left:34px;top:34px;border-radius:50%;background:#5de3ffc9;border:2px solid #d7fbff}
+#buttons{position:absolute;right:12px;bottom:24px;display:flex;flex-direction:column;gap:7px;pointer-events:auto}button{font:inherit;color:#eef6ff;background:#192945;border:1px solid #466184;border-radius:10px;padding:11px 13px;cursor:pointer}button:hover{border-color:#5ee9ff}.primary{background:#167ea0;border-color:#65edff;font-weight:700}
+#overlay{position:fixed;inset:0;z-index:10;background:#030712c9;display:flex;align-items:center;justify-content:center;padding:15px}
+.card{width:min(720px,100%);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#18243d,#0c1425);border:1px solid #3a4d70;border-radius:20px;padding:22px;box-shadow:0 20px 70px #000b}
+h1{font-size:clamp(34px,7vw,55px);margin:0 0 7px}h1 span{color:#5ee9ff}h2{margin-top:0}p{line-height:1.45;color:#c0cee4}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px}.choice{text-align:left;min-height:105px}.choice b{display:block;margin-bottom:6px}.tag{font-size:10px;color:#8fa8ca}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+ <div class="p">❤️ <b id="hpT">100/100</b><div id="hpbar"><div id="hp"></div></div></div>
+ <div class="p">🌊 Welle <b id="wave">1</b></div>
+ <div class="p">💀 Kills <b id="kills">0</b></div>
+ <div class="p">🪙 <b id="coins">0</b></div>
+ <div class="p">👥 <b id="squad">1</b></div>
+ <div class="p">⭐ Lv <b id="level">1</b></div>
+</div>
+<div id="hint">WASD / Pfeile · Maus gedrückt halten zum Bewegen · Handy: Joystick · Schießen automatisch</div>
+<div id="mobile"><div id="stick"><div id="knob"></div></div><div id="buttons"><button id="shop">🛒 Shop</button><button id="pause">Ⅱ Pause</button></div></div>
+<div id="overlay"><div class="card" id="menu">
+<h1>Squad <span>Survivor</span></h1>
+<p>Überlebe endlose Wellen, sammle Upgrades, rekrutiere dein Squad und besiege alle 5 Wellen einen Boss.</p>
+<div class="grid">
+<div class="p">🔫 Automatisches Zielen und Schießen</div><div class="p">👥 Teammitglieder folgen dir</div>
+<div class="p">✨ 7 Seltenheitsstufen</div><div class="p">♻️ Rebirth mit dauerhaften Boni</div>
+</div>
+<p><b>PC:</b> WASD/Pfeile oder Maus gedrückt halten. <b>Handy:</b> linker Joystick.</p>
+<button class="primary" id="start" style="width:100%;font-size:18px">▶ Spiel starten</button>
+</div></div>
+<script>
+(()=>{const c=document.getElementById('c'),x=c.getContext('2d');let W,H,dpr=1;
+function size(){W=innerWidth;H=innerHeight;dpr=Math.min(devicePixelRatio||1,2);c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';x.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',size);size();
+let state='menu',keys={},mouse={x:0,y:0,down:false},joy={x:0,y:0,on:false},last=0,spawn=0,shot=0;
+let p,en=[],bul=[],eb=[],parts=[],team=[],wave=1,kills=0,coins=0,lvl=1,xp=0,nextxp=8,boss=false,rebirth=0,waveKills=0,stats;
+const rar=[['Gewöhnlich',4.8],['Selten',49.1],['Superselten',30],['Episch',10],['Legendär',5],['Mythisch',1],['Kosmisch',.1]];
+function reset(){en=[];bul=[];eb=[];parts=[];wave=1;kills=0;coins=0;lvl=1;xp=0;nextxp=8;boss=false;waveKills=0;stats={d:16+rebirth*3,rate:.45,speed:245,bs:480,range:520,crit:0,extra:0,heal:0};p={x:0,y:0,r:15,hp:100+rebirth*15,max:100+rebirth*15,inv:0};team=[{x:-35,y:25,d:stats.d*.65}];hud()}
+function hud(){if(!p)return;hpT.textContent=Math.max(0,Math.ceil(p.hp))+'/'+p.max;hp.style.width=Math.max(0,p.hp/p.max*100)+'%';wave&&($('wave').textContent=wave);kills&&($('kills').textContent=kills);coins&&($('coins').textContent=coins);squad.textContent=team.length;level.textContent=lvl}
+const $=id=>document.getElementById(id);
+function overlay(s){$('overlay').innerHTML='<div class="card">'+s+'</div>';$('overlay').style.display='flex'}function hide(){$('overlay').style.display='none'}
+function toast(t){const z=document.createElement('div');z.textContent=t;Object.assign(z.style,{position:'fixed',top:'90px',left:'50%',transform:'translateX(-50%)',zIndex:20,background:'#132440',border:'1px solid #5ee9ff',padding:'9px 13px',borderRadius:'10px'});document.body.append(z);setTimeout(()=>z.remove(),1500)}
+function rarity(){let n=Math.random()*100,s=0;for(const r of rar){s+=r[1];if(n<s)return r}return rar[1]}
+const pool=[
+['Stärkeres Kaliber','+35% Schaden',()=>stats.d*=1.35],['Schnellfeuer','20% schneller',()=>stats.rate=Math.max(.12,stats.rate*.8)],
+['Laufschub','+20% Bewegung',()=>stats.speed*=1.2],['Vitalität','+25 maximale HP',()=>{p.max+=25;p.hp=Math.min(p.max,p.hp+25)}],
+['Durchschlag','+25% Projektiltempo',()=>stats.bs*=1.25],['Weitreichend','+20% Reichweite',()=>stats.range*=1.2],
+['Kritischer Treffer','+8% Crit',()=>stats.crit=Math.min(.6,stats.crit+.08)],['Zusatzgeschoss','+1 Projektil',()=>stats.extra=Math.min(4,stats.extra+1)],
+['Team-Rekrut','+1 Kämpfer',()=>{if(team.length<8)team.push({x:p.x+30,y:p.y+20,d:stats.d*.65});else coins+=50}],
+['Regeneration','+2 HP/s',()=>stats.heal+=2],['Squad-Training','Team +25% Schaden',()=>team.forEach(t=>t.d*=1.25)]
+];
+function upgrade(){state='up';let r=rarity(),a=[0,0,0].map(()=>pool[Math.floor(Math.random()*pool.length)]);overlay(`<h2>✨ Welle ${wave} geschafft!</h2><p>Alle 3 Karten haben die Seltenheit <b>${r[0]}</b> (${r[1]}%).</p><div class="grid">${a.map((u,i)=>`<button class="choice" data-i="${i}"><span class="tag">${r[0]}</span><b>${u[0]}</b>${u[1]}</button>`).join('')}</div><p>❤️ +25 HP Heilung nach der Welle.</p><button id="cont" class="primary" style="width:100%">Weiter</button><button id="upshop" style="width:100%;margin-top:7px">🛒 Shop</button>`);document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{a[+b.dataset.i][2]();finish()});$('cont').onclick=finish;$('upshop').onclick=()=>shop('up')}
+function finish(){p.hp=Math.min(p.max,p.hp+25);wave++;waveKills=0;boss=false;state='play';hide();toast('Welle geschafft! +25 HP')}
+function shop(back='play'){state='shop';overlay(`<h2>🛒 Shop</h2><p>Münzen: <b>${coins}</b></p><div class="grid">
+<button class="choice" data-b="heal"><b>❤️ Heilung — 35</b>+45 HP</button><button class="choice" data-b="team"><b>👥 Team — 100</b>+1 Mitglied</button>
+<button class="choice" data-b="dmg"><b>🔫 Waffenmod — 80</b>+20% Schaden</button><button class="choice" data-b="rate"><b>⚡ Schnellladen — 90</b>15% schneller</button>
+</div><button id="back" class="primary" style="width:100%">Zurück</button>`);document.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>buy(b.dataset.b));$('back').onclick=()=>{state=back;back==='up'?upgrade():hide()}}
+function buy(q){let cost={heal:35,team:100,dmg:80,rate:90}[q];if(coins<cost)return toast('Nicht genug Münzen!');if(q==='team'&&team.length>=8)return toast('Squad voll!');coins-=cost;if(q==='heal')p.hp=Math.min(p.max,p.hp+45);if(q==='team')team.push({x:p.x+30,y:p.y+20,d:stats.d*.65});if(q==='dmg')stats.d*=1.2;if(q==='rate')stats.rate=Math.max(.12,stats.rate*.85);hud();shop('play')}
+function gameover(){state='over';overlay(`<h2>💥 Game Over</h2><p>Welle <b>${wave}</b> · Kills <b>${kills}</b> · Rebirths <b>${rebirth}</b></p><button id="again" class="primary" style="width:100%">🔄 Nochmal</button><button id="reb" style="width:100%;margin-top:7px">♻️ Rebirth</button>`);$('again').onclick=()=>{reset();state='play';hide()};$('reb').onclick=()=>{rebirth++;reset();state='play';hide();toast('Rebirth! Dauerhafte Boni erhalten.')}}
+function start(){reset();state='play';hide();if(navigator.maxTouchPoints>0)$('mobile').style.display='block'}
+$('start').onclick=start;
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=1;if(e.key==='Escape'&&state==='play'){state='pause';overlay('<h2>⏸ Pause</h2><button id="resume" class="primary" style="width:100%">Weiter</button><button id="ps" style="width:100%;margin-top:7px">Shop</button>');$('resume').onclick=()=>{state='play';hide()};$('ps').onclick=()=>shop('pause')}});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=0);
+c.onpointerdown=e=>{if(e.pointerType==='mouse'){mouse.down=true;mouse.x=e.clientX;mouse.y=e.clientY}};addEventListener('pointermove',e=>{if(e.pointerType==='mouse'){mouse.x=e.clientX;mouse.y=e.clientY}});addEventListener('pointerup',e=>{if(e.pointerType==='mouse')mouse.down=false});
+let sid=null,base=$('stick'),knob=$('knob');base.onpointerdown=e=>{sid=e.pointerId;base.setPointerCapture(sid);joy.on=true;stick(e)};base.onpointermove=e=>{if(e.pointerId===sid)stick(e)};function stick(e){let r=base.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),m=r.width*.34,l=Math.hypot(dx,dy)||1;joy.x=dx/Math.max(m,l);joy.y=dy/Math.max(m,l);knob.style.left=(r.width/2-24+joy.x*m)+'px';knob.style.top=(r.height/2-24+joy.y*m)+'px'}function rel(e){if(e.pointerId===sid){sid=null;joy.on=false;joy.x=joy.y=0;knob.style.left='34px';knob.style.top='34px'}}base.onpointerup=rel;base.onpointercancel=rel;
+$('shop').onclick=()=>shop('play');$('pause').onclick=()=>{if(state==='play'){state='pause';overlay('<h2>⏸ Pause</h2><button id="resume" class="primary" style="width:100%">Weiter</button>');$('resume').onclick=()=>{state='play';hide()}}};
+function spawnEnemy(isBoss=false){let a=Math.random()*Math.PI*2,d=Math.max(W,H)*.65+Math.random()*100,s=Math.pow(1.5,Math.floor((wave-1)/5)),hp=(isBoss?350:30+wave*7)*s;en.push({x:p.x+Math.cos(a)*d,y:p.y+Math.sin(a)*d,r:isBoss?28:13,hp,max:hp,spd:(isBoss?45:65+wave)*Math.min(2,s*.7+.3),d:(isBoss?22:7+wave*.5)*s,b:isBoss,t:1})}
+function target(o){let best=null,bd=stats.range;for(const e of en){let d=Math.hypot(e.x-o.x,e.y-o.y);if(d<bd){bd=d;best=e}}return best}
+function fire(o,dmg){let t=target(o);if(!t)return;let a=Math.atan2(t.y-o.y,t.x-o.x),n=1+stats.extra;for(let i=0;i<n;i++){let q=a+(i-(n-1)/2)*.11;bul.push({x:o.x,y:o.y,vx:Math.cos(q)*stats.bs,vy:Math.sin(q)*stats.bs,r:4,life:1.4,dmg})}}
+function burst(q,r,col){for(let i=0;i<r;i++){let a=Math.random()*6.28,s=30+Math.random()*130;parts.push({x:q.x,y:q.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.4,c:col})}}
+function update(dt){if(state!=='play')return;let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);if(joy.on){dx=joy.x;dy=joy.y}else if(mouse.down){dx=mouse.x-W/2;dy=mouse.y-H/2;let l=Math.hypot(dx,dy);if(l>12){dx/=l;dy/=l}else dx=dy=0}let l=Math.hypot(dx,dy);if(l){p.x+=dx/l*stats.speed*dt;p.y+=dy/l*stats.speed*dt}
+p.hp=Math.min(p.max,p.hp+stats.heal*dt);p.inv=Math.max(0,p.inv-dt);spawn-=dt;if(spawn<=0){if(wave%5===0&&!boss){spawnEnemy(true);boss=true;toast('⚠️ BOSS-WELLE!')}else spawnEnemy();spawn=Math.max(.18,1.05-wave*.03)}shot-=dt;if(shot<=0){fire(p,stats.d);team.forEach((t,i)=>{let a=performance.now()/1000+i*2.4;t.x+=(p.x+Math.cos(a)*50-t.x)*Math.min(1,dt*3);t.y+=(p.y+Math.sin(a)*50-t.y)*Math.min(1,dt*3);fire(t,t.d)});shot=stats.rate}
+for(const e of en){let a=Math.atan2(p.y-e.y,p.x-e.x);e.x+=Math.cos(a)*e.spd*dt;e.y+=Math.sin(a)*e.spd*dt;if(Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r&&p.inv<=0){p.hp-=e.d*dt;p.inv=.15}if(e.b){e.t-=dt;if(e.t<=0){eb.push({x:e.x,y:e.y,vx:Math.cos(a)*170,vy:Math.sin(a)*170,r:6,dmg:e.d,life:3});e.t=1.8}}}
+for(const b of bul){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;for(const e of en)if(e.hp>0&&Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){e.hp-=b.dmg;b.life=0;break}}bul=bul.filter(b=>b.life>0);
+for(const b of eb){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(Math.hypot(b.x-p.x,b.y-p.y)<p.r+b.r&&p.inv<=0){p.hp-=b.dmg;p.inv=.4;b.life=0}}eb=eb.filter(b=>b.life>0);
+for(const e of en)if(e.hp<=0&&!e.dead){e.dead=1;kills++;waveKills++;coins+=e.b?100:1;xp+=e.b?10:1;burst(e,e.b?20:6,e.b?'#ff5a78':'#6eeaff');if(xp>=nextxp){xp-=nextxp;lvl++;nextxp=Math.floor(nextxp*1.35+2);coins+=10;toast('Level Up! +10 🪙')}}
+en=en.filter(e=>!e.dead);for(const z of parts){z.x+=z.vx*dt;z.y+=z.vy*dt;z.l-=dt}parts=parts.filter(z=>z.l>0);if(waveKills>=Math.max(12,8+wave*2)&&!en.some(e=>e.b))upgrade();if(p.hp<=0)gameover();hud()}
+function draw(){x.clearRect(0,0,W,H);x.fillStyle='#070b16';x.fillRect(0,0,W,H);for(let i=0;i<130;i++){let sx=((i*173-p.x*.12)%W+W)%W,sy=((i*97-p.y*.12)%H+H)%H;x.fillStyle=i%9?'#53627d':'#65eaff';x.globalAlpha=i%9?.35:.8;x.fillRect(sx,sy,i%9?1:2,i%9?1:2)}x.globalAlpha=1;
+for(const e of en){let sx=W/2+e.x-p.x,sy=H/2+e.y-p.y;x.fillStyle=e.b?'#ff5472':'#ff7587';x.shadowBlur=e.b?25:8;x.shadowColor=x.fillStyle;x.beginPath();x.arc(sx,sy,e.r,0,6.28);x.fill();x.shadowBlur=0;x.fillStyle='#252b40';x.fillRect(sx-e.r,sy-e.r-8,e.r*2,4);x.fillStyle='#67ed9a';x.fillRect(sx-e.r,sy-e.r-8,e.r*2*Math.max(0,e.hp/e.max),4);if(e.b){x.fillStyle='#fff';x.font='bold 11px system-ui';x.textAlign='center';x.fillText('BOSS',sx,sy-e.r-12)}}
+for(const b of bul){let sx=W/2+b.x-p.x,sy=H/2+b.y-p.y;x.fillStyle='#66efff';x.beginPath();x.arc(sx,sy,4,0,6.28);x.fill()}for(const b of eb){let sx=W/2+b.x-p.x,sy=H/2+b.y-p.y;x.fillStyle='#ff6d84';x.beginPath();x.arc(sx,sy,6,0,6.28);x.fill()}
+for(const t of team){let sx=W/2+t.x-p.x,sy=H/2+t.y-p.y;x.fillStyle='#a98cff';x.beginPath();x.arc(sx,sy,10,0,6.28);x.fill()}
+x.fillStyle='#42d8ef';x.shadowBlur=18;x.shadowColor='#42d8ef';x.beginPath();x.arc(W/2,H/2,15,0,6.28);x.fill();x.shadowBlur=0;x.strokeStyle='#d7fbff';x.stroke();
+for(const z of parts){x.globalAlpha=Math.max(0,z.l/.4);x.fillStyle=z.c;x.beginPath();x.arc(W/2+z.x-p.x,H/2+z.y-p.y,3,0,6.28);x.fill()}x.globalAlpha=1}
+function loop(t){let dt=Math.min(.033,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)}reset();requestAnimationFrame(loop)
+})();
+</script></body></html>
